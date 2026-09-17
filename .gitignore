@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+*.dek
+*.dek.b64
+*.plaintext.json
+out/
+.env
