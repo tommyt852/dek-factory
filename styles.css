@@ -13,7 +13,7 @@
   --warn: #fbbf24;
   --err: #f87171;
   --danger: #dc2626;
-  --radius: 10px;
+  --radius: 12px;
   --font: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
   --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
@@ -137,11 +137,12 @@ code {
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
-  padding: 0.55rem 0.9rem;
+  padding: 0.65rem 1.15rem;
   border-radius: 8px 8px 0 0;
   cursor: pointer;
   font: inherit;
   font-weight: 600;
+  font-size: 1rem;
 }
 
 .tab:hover {
@@ -158,41 +159,102 @@ code {
 }
 
 main {
-  padding: 1.25rem 1.5rem 2.5rem;
-  max-width: 960px;
+  padding: 1.25rem 1.5rem 1.5rem;
+  max-width: 980px;
 }
 
 .panel {
   display: none;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.35rem;
 }
 
 .panel.active {
   display: block;
 }
 
-.panel h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.2rem;
+.panel h2,
+.card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
 }
 
-.panel h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.05rem;
+.panel h3,
+.card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.02rem;
 }
 
-.panel p {
+.panel p,
+.card p {
   margin: 0 0 1rem;
   color: var(--muted);
 }
 
-.panel hr {
+/* Ordered workflow steps */
+.steps {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem 0.85rem 2.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.steps li {
+  margin: 0.2rem 0;
+}
+
+.steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Cards */
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.3rem;
+  margin-bottom: 1rem;
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.hint {
+  margin: 0.65rem 0 0 !important;
+  font-size: 0.85rem !important;
+  color: var(--muted) !important;
+}
+
+.warn-text {
+  color: var(--warn) !important;
+}
+
+.soft {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 1.5rem 0;
+  margin: 1.15rem 0;
 }
 
 .warn-box {
@@ -211,6 +273,23 @@ main {
   color: var(--warn);
 }
 
+.banner {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+
+.banner-warn {
+  background: #422006;
+  border: 1px solid #a16207;
+  color: #fde68a;
+}
+
+.hidden {
+  display: none !important;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -225,6 +304,16 @@ label.check {
   align-items: center;
   gap: 0.5rem;
   color: var(--text);
+}
+
+.spacer {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .spacer {
+    display: block;
+  }
 }
 
 input[type='text'],
@@ -243,7 +332,7 @@ textarea {
 
 textarea {
   resize: vertical;
-  min-height: 12rem;
+  min-height: 10rem;
   line-height: 1.4;
 }
 
@@ -340,6 +429,90 @@ button.warn {
   color: #fff;
 }
 
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+button.btn-lg {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1.05rem;
+  margin-top: 0.25rem;
+}
+
+/* User list */
+.user-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.user-list li {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+
+.user-list li:last-child {
+  border-bottom: none;
+}
+
+.user-list li.muted {
+  color: var(--muted);
+  font-family: var(--font);
+}
+
+/* Advanced */
+.advanced-wrap {
+  max-width: 980px;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.advanced {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 1rem 0.85rem;
+}
+
+.advanced > summary,
+.advanced-inline > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0.55rem 0;
+  user-select: none;
+}
+
+.advanced > summary:hover,
+.advanced-inline > summary:hover {
+  color: var(--text);
+}
+
+.advanced-body {
+  padding-top: 0.5rem;
+}
+
+.advanced-body .card {
+  background: var(--bg);
+}
+
+.advanced-inline {
+  margin-top: 0.85rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+
+.advanced-inline label {
+  margin-top: 0.5rem;
+}
+
 .footer {
   padding: 1rem 1.5rem 2rem;
   color: var(--muted);
@@ -349,5 +522,5 @@ button.warn {
 
 .footer p {
   margin: 0;
-  max-width: 960px;
+  max-width: 980px;
 }

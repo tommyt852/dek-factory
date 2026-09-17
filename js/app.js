@@ -1,5 +1,6 @@
 /**
  * DEK factory UI — browser-only operator tool.
+ * Primary flow: 開始 → 用戶 → 輪替. Advanced tools collapsed.
  * Passphrases never go to URL / localStorage; fields cleared after use.
  */
 
@@ -7,8 +8,6 @@ import {
   DEK_BYTES,
   assertPassphraseStrength,
   generateDek,
-  importDekKey,
-  exportDekRaw,
   wrapDek,
   unwrapDek,
   createEmptyKeyring,
@@ -49,9 +48,7 @@ function refreshStatusBar() {
   dekEl.textContent = state.dek ? `已載入（${DEK_BYTES} bytes）` : '未載入';
   dekEl.className = state.dek ? 'pill ok' : 'pill';
   const n = state.keyring?.users?.length ?? 0;
-  krEl.textContent = state.keyring
-    ? `已載入（${n} 位使用者）`
-    : '未載入';
+  krEl.textContent = state.keyring ? `已載入（${n} 位用戶）` : '未載入';
   krEl.className = state.keyring ? 'pill ok' : 'pill';
   const rev =
     state.enc && typeof state.enc.revision === 'number'
@@ -62,11 +59,50 @@ function refreshStatusBar() {
     : '未載入';
   encEl.className = state.enc ? 'pill ok' : 'pill';
   fillUserSelects();
+  renderUserList();
+  updateUsersBanner();
+}
+
+function updateUsersBanner() {
+  const banner = $('#users-dek-banner');
+  if (!banner) return;
+  banner.classList.toggle('hidden', !!state.dek);
+}
+
+function renderUserList() {
+  const list = $('#user-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!state.keyring) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = '（未載入 keyring）';
+    list.appendChild(li);
+    return;
+  }
+  const users = state.keyring.users ?? [];
+  if (users.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = '（未有用戶 — 請新增）';
+    list.appendChild(li);
+    return;
+  }
+  for (const u of users) {
+    const li = document.createElement('li');
+    li.textContent = u.id;
+    list.appendChild(li);
+  }
 }
 
 function fillUserSelects() {
   const users = state.keyring?.users ?? [];
-  for (const sel of ['#decrypt-user', '#unlock-user', '#rotate-user', '#remove-user']) {
+  for (const sel of [
+    '#decrypt-user',
+    '#unlock-user',
+    '#rotate-user',
+    '#remove-user',
+  ]) {
     const el = $(sel);
     if (!el) continue;
     const prev = el.value;
@@ -74,7 +110,7 @@ function fillUserSelects() {
     if (users.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = '（無使用者）';
+      opt.textContent = '（無用戶）';
       el.appendChild(opt);
     } else {
       for (const u of users) {
@@ -137,7 +173,9 @@ function readFileAsArrayBuffer(file) {
 
 async function ensureDekInMemory() {
   if (state.dek) return state.dek;
-  throw new Error('記憶體中沒有 DEK。請先「初始化」、匯入 .dek，或以使用者口令解鎖。');
+  throw new Error(
+    '記憶體中沒有 DEK。請先去「開始」建立工廠，或載入檔案後用口傳 passphrase 解鎖。',
+  );
 }
 
 function requireKeyring() {
@@ -150,7 +188,7 @@ function requireEnc() {
   return state.enc;
 }
 
-/* ---------- Init ---------- */
+/* ---------- Init（第一次建立） ---------- */
 async function onInit() {
   try {
     const dek = generateDek();
@@ -162,13 +200,14 @@ async function onInit() {
     state.keyring = keyring;
     state.enc = enc;
     state.messagesText = JSON.stringify(messages, null, 2);
-    $('#messages-editor').value = state.messagesText;
+    const editor = $('#messages-editor');
+    if (editor) editor.value = state.messagesText;
 
     downloadJson('keyring.json', keyring);
     downloadJson('chat-history.enc', enc);
 
-    const alsoDek = $('#init-download-dek').checked;
-    const dekFmt = $('#init-dek-format').value;
+    const alsoDek = $('#init-download-dek')?.checked;
+    const dekFmt = $('#init-dek-format')?.value || 'raw';
     if (alsoDek) {
       if (dekFmt === 'raw') {
         downloadBlob(
@@ -182,10 +221,10 @@ async function onInit() {
 
     refreshStatusBar();
     setStatus(
-      '已初始化：產生新 DEK（僅在記憶體）、空 keyring、revision 1 的 chat-history.enc。' +
+      '已建立新工廠：DEK 在記憶體、空 keyring、revision 1 的 enc 已下載。' +
         (alsoDek
-          ? ' 已下載 .dek — 此檔為【僅本機】機密，絕不可放到網路磁碟或 git。'
-          : ' 未下載 .dek；可稍後匯入或從使用者解鎖。'),
+          ? ' 已下載 .dek — 只係本機後備，絕不可放 network drive。'
+          : ' 未下載 .dek（預設）。下一步去「用戶」新增用戶。'),
       'ok',
     );
   } catch (e) {
@@ -193,73 +232,84 @@ async function onInit() {
   }
 }
 
-/* ---------- Import ---------- */
+/* ---------- Import keyring + enc（主路徑） ---------- */
 async function onImport() {
   try {
     const krFile = $('#import-keyring').files?.[0];
     const encFile = $('#import-enc').files?.[0];
-    const dekFile = $('#import-dek').files?.[0];
 
-    if (!krFile && !encFile && !dekFile) {
-      throw new Error('請至少選擇 keyring.json、chat-history.enc 或 .dek 之一');
+    if (!krFile || !encFile) {
+      throw new Error('請同時揀 keyring.json 同 chat-history.enc');
     }
 
-    if (krFile) {
-      const text = await readFileAsText(krFile);
-      const obj = JSON.parse(text);
-      if (!obj || !Array.isArray(obj.users)) {
-        throw new Error('keyring.json 格式無效（缺少 users 陣列）');
-      }
-      state.keyring = obj;
+    const krText = await readFileAsText(krFile);
+    const krObj = JSON.parse(krText);
+    if (!krObj || !Array.isArray(krObj.users)) {
+      throw new Error('keyring.json 格式無效（缺少 users 陣列）');
     }
 
-    if (encFile) {
-      const text = await readFileAsText(encFile);
-      const obj = JSON.parse(text);
-      if (!obj || typeof obj.ciphertext !== 'string') {
-        throw new Error('chat-history.enc 格式無效');
-      }
-      state.enc = obj;
+    const encText = await readFileAsText(encFile);
+    const encObj = JSON.parse(encText);
+    if (!encObj || typeof encObj.ciphertext !== 'string') {
+      throw new Error('chat-history.enc 格式無效');
     }
 
-    if (dekFile) {
-      const buf = await readFileAsArrayBuffer(dekFile);
-      state.dek = parseDekFileBytes(buf);
-    }
+    state.keyring = krObj;
+    state.enc = encObj;
 
     refreshStatusBar();
-    setStatus('匯入完成。', 'ok');
+    const n = krObj.users.length;
+    setStatus(
+      `已載入 keyring（${n} 位用戶）同 enc（revision ${encObj.revision ?? '?'}）。` +
+        (n > 0
+          ? ' 請用口傳 passphrase 解鎖。'
+          : ' keyring 未有用戶；若記憶體無 DEK，請用進階匯入 .dek 或重新建立。'),
+      'ok',
+    );
   } catch (e) {
     setStatus(e.message || String(e), 'err');
   }
 }
 
-/* ---------- Unlock from user ---------- */
+/* ---------- Unlock from user passphrase ---------- */
 async function onUnlock() {
   try {
     const keyring = requireKeyring();
     const userId = $('#unlock-user').value;
     const pass = $('#unlock-pass').value;
-    if (!userId) throw new Error('請選擇使用者');
-    if (!pass) throw new Error('請輸入口令');
+    if (!userId) throw new Error('請選擇用戶');
+    if (!pass) throw new Error('請輸入口傳 passphrase');
     const user = keyring.users.find((u) => u.id === userId);
-    if (!user) throw new Error(`找不到使用者：${userId}`);
+    if (!user) throw new Error(`找不到用戶：${userId}`);
     const dek = await unwrapDek(user, pass, keyring.kdfIterations);
     state.dek = dek;
     clearPassphraseFields('#unlock-pass');
     refreshStatusBar();
-    setStatus(`已從使用者「${userId}」解鎖 DEK 至記憶體。`, 'ok');
+    setStatus(`已用「${userId}」嘅口傳 passphrase 解鎖 DEK 到記憶體。`, 'ok');
   } catch (e) {
     clearPassphraseFields('#unlock-pass');
     setStatus(e.message || String(e), 'err');
   }
 }
 
-/* ---------- Clear DEK from memory ---------- */
 function onClearDek() {
   state.dek = null;
   refreshStatusBar();
   setStatus('已清除記憶體中的 DEK。', 'info');
+}
+
+/* ---------- Advanced: import .dek only ---------- */
+async function onImportDek() {
+  try {
+    const dekFile = $('#import-dek').files?.[0];
+    if (!dekFile) throw new Error('請選擇 .dek 檔');
+    const buf = await readFileAsArrayBuffer(dekFile);
+    state.dek = parseDekFileBytes(buf);
+    refreshStatusBar();
+    setStatus('已匯入 .dek 到記憶體（僅本機後備路徑）。', 'ok');
+  } catch (e) {
+    setStatus(e.message || String(e), 'err');
+  }
 }
 
 /* ---------- Add user ---------- */
@@ -272,8 +322,8 @@ async function onAddUser() {
     const userId = $('#add-user-id').value.trim();
     const p1 = $('#add-pass1').value;
     const p2 = $('#add-pass2').value;
-    if (!userId) throw new Error('請輸入使用者 ID');
-    if (p1 !== p2) throw new Error('兩次口令不一致');
+    if (!userId) throw new Error('請輸入用戶 ID');
+    if (p1 !== p2) throw new Error('兩次口傳 passphrase 不一致');
     assertPassphraseStrength(p1);
 
     const wrapped = await wrapDek(dek, p1);
@@ -286,7 +336,7 @@ async function onAddUser() {
     downloadJson('keyring.json', keyring);
     refreshStatusBar();
     setStatus(
-      `已為「${userId}」包裝 DEK 並下載更新的 keyring.json。請口頭告知口令，勿寫入檔案。`,
+      `已為「${userId}」包裝並下載 keyring.json。請口頭傳 passphrase；覆蓋到 network drive。`,
       'ok',
     );
   } catch (e) {
@@ -300,16 +350,16 @@ function onRemoveUser() {
   try {
     const keyring = requireKeyring();
     const userId = $('#remove-user').value;
-    if (!userId) throw new Error('請選擇要移除的使用者');
+    if (!userId) throw new Error('請選擇要移除的用戶');
     const before = keyring.users.length;
     keyring.users = keyring.users.filter((u) => u.id !== userId);
     if (keyring.users.length === before) {
-      throw new Error(`找不到使用者：${userId}`);
+      throw new Error(`找不到用戶：${userId}`);
     }
     downloadJson('keyring.json', keyring);
     refreshStatusBar();
     setStatus(
-      `已移除「${userId}」。警告：舊 DEK 與剩餘包裝仍可解密密文。若該使用者或口令已洩漏，請立即執行「輪替 DEK」。`,
+      `已移除「${userId}」並下載 keyring。若口傳 passphrase 可能已洩漏，請去「輪替」。`,
       'warn',
     );
   } catch (e) {
@@ -317,7 +367,7 @@ function onRemoveUser() {
   }
 }
 
-/* ---------- Encrypt ---------- */
+/* ---------- Encrypt / decrypt（進階） ---------- */
 async function onEncrypt() {
   try {
     const dek = await ensureDekInMemory();
@@ -326,7 +376,6 @@ async function onEncrypt() {
       text = JSON.stringify(createEmptyMessages(), null, 2);
       $('#messages-editor').value = text;
     }
-    // Validate JSON
     JSON.parse(text);
     const rev = nextRevision(state.enc);
     const enc = await encryptHistory(dek, text, rev);
@@ -354,7 +403,6 @@ async function onLoadPlaintextFile() {
   }
 }
 
-/* ---------- Decrypt ---------- */
 async function onDecrypt() {
   try {
     const enc = requireEnc();
@@ -365,16 +413,16 @@ async function onDecrypt() {
       const keyring = requireKeyring();
       const userId = $('#decrypt-user').value;
       const pass = $('#decrypt-pass').value;
-      if (!userId) throw new Error('請選擇使用者（或勾選使用記憶體 DEK）');
-      if (!pass) throw new Error('請輸入口令');
+      if (!userId) throw new Error('請選擇用戶（或勾選使用記憶體 DEK）');
+      if (!pass) throw new Error('請輸入口傳 passphrase');
       const user = keyring.users.find((u) => u.id === userId);
-      if (!user) throw new Error(`找不到使用者：${userId}`);
+      if (!user) throw new Error(`找不到用戶：${userId}`);
       dek = await unwrapDek(user, pass, keyring.kdfIterations);
       clearPassphraseFields('#decrypt-pass');
     }
 
     const plaintext = await decryptHistory(dek, enc);
-    JSON.parse(plaintext); // validate
+    JSON.parse(plaintext);
     $('#messages-editor').value = plaintext;
     state.messagesText = plaintext;
     downloadText('messages.plaintext.json', plaintext);
@@ -392,25 +440,25 @@ async function onRotate() {
     const enc = requireEnc();
     const keyring = requireKeyring();
     let oldDek = state.dek;
-    const mode = $('input[name="rotate-mode"]:checked')?.value || 'memory';
+    const mode = $('input[name="rotate-mode"]:checked')?.value || 'user';
 
     if (mode === 'user') {
       const userId = $('#rotate-user').value;
       const pass = $('#rotate-pass').value;
-      if (!userId) throw new Error('請選擇使用者');
-      if (!pass) throw new Error('請輸入口令');
+      if (!userId) throw new Error('請選擇用戶');
+      if (!pass) throw new Error('請輸入口傳 passphrase');
       const user = keyring.users.find((u) => u.id === userId);
-      if (!user) throw new Error(`找不到使用者：${userId}`);
+      if (!user) throw new Error(`找不到用戶：${userId}`);
       try {
         oldDek = await unwrapDek(user, pass, keyring.kdfIterations);
       } catch {
-        throw new Error('口令錯誤（unwrap 失敗）— 未寫入任何變更');
+        throw new Error('口傳 passphrase 錯誤 — 未寫入任何變更');
       }
       clearPassphraseFields('#rotate-pass');
     } else {
       if (!oldDek) {
         throw new Error(
-          '記憶體中沒有 DEK。請改用「使用者口令」模式，或先匯入 .dek / 解鎖。',
+          '記憶體中沒有 DEK。請改用口傳 passphrase，或先解鎖／匯入 .dek。',
         );
       }
     }
@@ -420,7 +468,9 @@ async function onRotate() {
       plaintext = await decryptHistory(oldDek, enc);
       JSON.parse(plaintext);
     } catch (err) {
-      throw new Error(`無法以舊 DEK 解密歷史：${err.message} — 未寫入任何變更`);
+      throw new Error(
+        `無法以舊 DEK 解密歷史：${err.message} — 未寫入任何變更`,
+      );
     }
 
     const oldRevision =
@@ -439,12 +489,13 @@ async function onRotate() {
     state.enc = newEnc;
     state.keyring = newKeyring;
     state.messagesText = plaintext;
-    $('#messages-editor').value = plaintext;
+    const editor = $('#messages-editor');
+    if (editor) editor.value = plaintext;
 
     downloadJson('keyring.json', newKeyring);
     downloadJson('chat-history.enc', newEnc);
 
-    const dekFmt = $('#rotate-dek-format').value;
+    const dekFmt = $('#rotate-dek-format')?.value || 'none';
     if (dekFmt === 'raw') {
       downloadBlob(
         'operator-local.dek',
@@ -456,14 +507,20 @@ async function onRotate() {
 
     refreshStatusBar();
     setStatus(
-      `輪替完成：revision ${oldRevision} → ${newRevision}，已清除 ${clearedUsers} 位使用者。` +
-        ' 請重新「新增使用者」包裝新 DEK。.dek 為【僅本機】機密，勿上傳網路磁碟。',
+      `輪替完成：revision ${oldRevision} → ${newRevision}，已清除 ${clearedUsers} 位用戶。` +
+        ' 請去「用戶」重新加入。新 keyring + enc 已下載；覆蓋到 network drive。',
       'ok',
     );
   } catch (e) {
     clearPassphraseFields('#rotate-pass');
     setStatus(e.message || String(e), 'err');
   }
+}
+
+function updateRotatePassVisibility() {
+  const mode = $('input[name="rotate-mode"]:checked')?.value || 'user';
+  const block = $('#rotate-pass-block');
+  if (block) block.style.display = mode === 'user' ? '' : 'none';
 }
 
 /* ---------- Download helpers ---------- */
@@ -500,7 +557,7 @@ function onDownloadDek() {
       downloadText('operator-local.dek.b64', bufToB64(state.dek), 'text/plain');
     }
     setStatus(
-      '已下載 .dek — 【僅本機】機密，絕不可放到網路磁碟、git、聊天或郵件。',
+      '已下載 .dek — 只係本機後備，絕不可放 network drive / git / 聊天。',
       'warn',
     );
   } catch (e) {
@@ -513,10 +570,15 @@ function initTabs() {
   $$('.tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.tab;
-      $$('.tab').forEach((b) => b.classList.toggle('active', b === btn));
+      $$('.tab').forEach((b) => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
       $$('.panel').forEach((p) =>
         p.classList.toggle('active', p.id === `panel-${id}`),
       );
+      if (id === 'users') updateUsersBanner();
     });
   });
 }
@@ -524,7 +586,7 @@ function initTabs() {
 function init() {
   if (!window.crypto?.subtle) {
     setStatus(
-      '此瀏覽器不支援 Web Crypto（需要安全環境：https 或 localhost，部分瀏覽器 file:// 也可用）。',
+      '此瀏覽器不支援 Web Crypto（需要 https 或 localhost）。',
       'err',
     );
   }
@@ -534,6 +596,7 @@ function init() {
   $('#btn-import').addEventListener('click', onImport);
   $('#btn-unlock').addEventListener('click', onUnlock);
   $('#btn-clear-dek').addEventListener('click', onClearDek);
+  $('#btn-import-dek').addEventListener('click', onImportDek);
   $('#btn-add-user').addEventListener('click', onAddUser);
   $('#btn-remove-user').addEventListener('click', onRemoveUser);
   $('#btn-encrypt').addEventListener('click', onEncrypt);
@@ -544,9 +607,18 @@ function init() {
   $('#btn-dl-enc').addEventListener('click', onDownloadEnc);
   $('#btn-dl-dek').addEventListener('click', onDownloadDek);
 
-  $('#messages-editor').value = state.messagesText;
+  $$('input[name="rotate-mode"]').forEach((r) => {
+    r.addEventListener('change', updateRotatePassVisibility);
+  });
+  updateRotatePassVisibility();
+
+  const editor = $('#messages-editor');
+  if (editor) editor.value = state.messagesText;
   refreshStatusBar();
-  setStatus('就緒。所有運算在本機瀏覽器完成，無伺服器。', 'info');
+  setStatus(
+    '就緒。日常：開始（建立或載入+解鎖）→ 用戶 → 只放 keyring+enc 到 network drive。',
+    'info',
+  );
 }
 
 init();

@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DEK Factory — 瀏覽器金鑰工廠</title>
+  <title>DEK Factory — 金鑰工廠</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="header">
     <div>
       <h1>DEK Factory</h1>
-      <p class="subtitle">瀏覽器端金鑰包裝工具（無伺服器 · Asia/Hong_Kong）</p>
+      <p class="subtitle">操作者工具 · 本機瀏覽器 · 無伺服器</p>
     </div>
     <div class="state-bar" aria-live="polite">
       <span>DEK：<span id="state-dek" class="pill">未載入</span></span>
@@ -22,214 +22,245 @@
   <div id="status" class="status status-info" role="status">載入中…</div>
 
   <nav class="tabs" role="tablist">
-    <button type="button" class="tab active" data-tab="init">初始化</button>
-    <button type="button" class="tab" data-tab="import">匯入 / 解鎖</button>
-    <button type="button" class="tab" data-tab="users">使用者</button>
-    <button type="button" class="tab" data-tab="crypto">加密 / 解密</button>
-    <button type="button" class="tab" data-tab="rotate">輪替 DEK</button>
-    <button type="button" class="tab" data-tab="export">匯出</button>
+    <button type="button" class="tab active" data-tab="start" role="tab" aria-selected="true">開始</button>
+    <button type="button" class="tab" data-tab="users" role="tab" aria-selected="false">用戶</button>
+    <button type="button" class="tab" data-tab="rotate" role="tab" aria-selected="false">輪替</button>
   </nav>
 
   <main>
-    <!-- INIT -->
-    <section id="panel-init" class="panel active">
-      <h2>初始化工廠</h2>
-      <p>產生隨機 32-byte DEK（僅存於記憶體）、空的 <code>keyring.json</code>、以及 revision 1 的空訊息 <code>chat-history.enc</code>，並觸發下載。</p>
-      <div class="warn-box">
-        <strong>.dek 僅本機機密（LOCAL ONLY）</strong>
-        若下載 .dek，絕不可放到網路磁碟、git、聊天或郵件。僅供操作者離線備份。
-      </div>
-      <label class="check">
-        <input type="checkbox" id="init-download-dek" checked />
-        同時下載操作者備份 .dek
-      </label>
-      <label>
-        .dek 格式
-        <select id="init-dek-format">
-          <option value="raw">原始二進位（32 bytes）</option>
-          <option value="b64">Base64 文字</option>
-        </select>
-      </label>
-      <button type="button" id="btn-init" class="primary">初始化並下載產物</button>
-    </section>
+    <!-- START -->
+    <section id="panel-start" class="panel active" role="tabpanel">
+      <ol class="steps">
+        <li>載入或建立工廠</li>
+        <li>管理用戶</li>
+        <li>只把 <code>keyring.json</code> + <code>chat-history.enc</code> 放到 network drive</li>
+      </ol>
 
-    <!-- IMPORT -->
-    <section id="panel-import" class="panel">
-      <h2>匯入既有產物</h2>
-      <p>從網路磁碟或本機選取檔案載入記憶體。口令不會寫入 URL 或 localStorage。</p>
-      <div class="grid-2">
-        <label>
-          keyring.json
-          <input type="file" id="import-keyring" accept=".json,application/json" />
-        </label>
-        <label>
-          chat-history.enc
-          <input type="file" id="import-enc" accept=".enc,.json,application/json" />
-        </label>
-        <label>
-          .dek（可選，僅本機）
-          <input type="file" id="import-dek" accept=".dek,.b64,.txt,*/*" />
-        </label>
-      </div>
-      <button type="button" id="btn-import" class="primary">匯入選取檔案</button>
+      <div class="card-grid">
+        <article class="card">
+          <h2>第一次建立</h2>
+          <p>產生新 DEK（只存記憶體）、空 keyring、空 chat 歷史（revision 1），並下載兩個檔。</p>
+          <button type="button" id="btn-init" class="primary btn-lg">建立新工廠</button>
+          <details class="advanced-inline">
+            <summary>進階：一併下載 .dek 本機後備</summary>
+            <label class="check">
+              <input type="checkbox" id="init-download-dek" />
+              下載 .dek（預設唔下載）
+            </label>
+            <label>
+              .dek 格式
+              <select id="init-dek-format">
+                <option value="raw">原始二進位（32 bytes）</option>
+                <option value="b64">Base64 文字</option>
+              </select>
+            </label>
+            <p class="hint warn-text">.dek 只係本機後備，絕不可放 network drive / git / 聊天。</p>
+          </details>
+        </article>
 
-      <hr />
+        <article class="card">
+          <h2>載入已有檔案</h2>
+          <p>從 network drive 揀 <code>keyring.json</code> 同 <code>chat-history.enc</code>，再用口傳 passphrase 解鎖。</p>
+          <div class="stack">
+            <label>
+              keyring.json（必填）
+              <input type="file" id="import-keyring" accept=".json,application/json" />
+            </label>
+            <label>
+              chat-history.enc（必填）
+              <input type="file" id="import-enc" accept=".enc,.json,application/json" />
+            </label>
+            <button type="button" id="btn-import" class="primary">載入</button>
+          </div>
 
-      <h3>以使用者口令解鎖 DEK</h3>
-      <p>若無 .dek，可用已註冊使用者的口令從 keyring 解開 DEK 到記憶體。</p>
-      <div class="grid-2">
-        <label>
-          使用者
-          <select id="unlock-user"></select>
-        </label>
-        <label>
-          口令
-          <input type="password" id="unlock-pass" autocomplete="off" spellcheck="false" />
-        </label>
-      </div>
-      <div class="row">
-        <button type="button" id="btn-unlock" class="primary">解鎖至記憶體</button>
-        <button type="button" id="btn-clear-dek" class="danger">清除記憶體 DEK</button>
+          <hr class="soft" />
+
+          <h3>用口傳 passphrase 解鎖</h3>
+          <p class="hint">解鎖後 DEK 會入記憶體；唔使 .dek 檔。</p>
+          <div class="grid-2">
+            <label>
+              用戶
+              <select id="unlock-user"></select>
+            </label>
+            <label>
+              口傳 passphrase
+              <input type="password" id="unlock-pass" autocomplete="off" spellcheck="false" />
+            </label>
+          </div>
+          <div class="row">
+            <button type="button" id="btn-unlock" class="primary">解鎖</button>
+            <button type="button" id="btn-clear-dek" class="ghost">清除記憶體 DEK</button>
+          </div>
+        </article>
       </div>
     </section>
 
     <!-- USERS -->
-    <section id="panel-users" class="panel">
-      <h2>新增使用者</h2>
-      <p>需要記憶體中已有 DEK（初始化、匯入 .dek、或解鎖）。口令至少 12 字元且不可命中拒絕清單。</p>
-      <div class="grid-2">
-        <label>
-          使用者 ID
-          <input type="text" id="add-user-id" autocomplete="off" spellcheck="false" />
-        </label>
-        <span></span>
-        <label>
-          口令
-          <input type="password" id="add-pass1" autocomplete="new-password" spellcheck="false" />
-        </label>
-        <label>
-          再輸入一次
-          <input type="password" id="add-pass2" autocomplete="new-password" spellcheck="false" />
-        </label>
+    <section id="panel-users" class="panel" role="tabpanel">
+      <div id="users-dek-banner" class="banner banner-warn hidden" role="alert">
+        記憶體未有 DEK。請先去「開始」建立工廠，或載入檔案後用口傳 passphrase 解鎖。
       </div>
-      <button type="button" id="btn-add-user" class="primary">包裝 DEK 並下載 keyring</button>
 
-      <hr />
-
-      <h2>移除使用者</h2>
-      <div class="warn-box">
-        移除後該使用者無法再 unwrap。若其口令可能已洩漏，請接著執行「輪替 DEK」。
+      <div class="card">
+        <h2>新增用戶</h2>
+        <p>用記憶體 DEK 包裝口傳 passphrase，下載新 <code>keyring.json</code>。</p>
+        <div class="grid-2">
+          <label>
+            用戶 ID
+            <input type="text" id="add-user-id" autocomplete="off" spellcheck="false" />
+          </label>
+          <span class="spacer"></span>
+          <label>
+            口傳 passphrase
+            <input type="password" id="add-pass1" autocomplete="new-password" spellcheck="false" />
+          </label>
+          <label>
+            再輸入一次
+            <input type="password" id="add-pass2" autocomplete="new-password" spellcheck="false" />
+          </label>
+        </div>
+        <button type="button" id="btn-add-user" class="primary">新增並下載 keyring</button>
+        <p class="hint">至少 12 字元；口頭傳 passphrase，唔好寫入檔案。</p>
       </div>
-      <label>
-        使用者
-        <select id="remove-user"></select>
-      </label>
-      <button type="button" id="btn-remove-user" class="danger">移除並下載 keyring</button>
-    </section>
 
-    <!-- CRYPTO -->
-    <section id="panel-crypto" class="panel">
-      <h2>加密訊息</h2>
-      <p>上傳明文 JSON，或直接在下方編輯。使用記憶體 DEK 加密；若已匯入 enc 則 revision +1。</p>
-      <div class="row">
-        <label>
-          明文 messages JSON 檔
-          <input type="file" id="encrypt-file" accept=".json,application/json" />
-        </label>
-        <button type="button" id="btn-load-plain">載入到編輯器</button>
+      <div class="card">
+        <h2>目前用戶</h2>
+        <ul id="user-list" class="user-list">
+          <li class="muted">（未載入 keyring）</li>
+        </ul>
+        <div class="row">
+          <label>
+            移除用戶
+            <select id="remove-user"></select>
+          </label>
+          <button type="button" id="btn-remove-user" class="danger">移除並下載 keyring</button>
+        </div>
+        <p class="hint">改完後把新 <code>keyring.json</code> 覆蓋到 network drive；enc 通常唔使動，除非輪替。</p>
       </div>
-      <label>
-        明文（可編輯）
-        <textarea id="messages-editor" rows="14" spellcheck="false"></textarea>
-      </label>
-      <button type="button" id="btn-encrypt" class="primary">加密並下載 chat-history.enc</button>
-
-      <hr />
-
-      <h2>解密訊息</h2>
-      <p>可用記憶體 DEK，或選使用者 + 口令 unwrap（不需 .dek）。</p>
-      <label class="check">
-        <input type="checkbox" id="decrypt-use-memory" />
-        優先使用記憶體 DEK（若已載入）
-      </label>
-      <div class="grid-2">
-        <label>
-          使用者
-          <select id="decrypt-user"></select>
-        </label>
-        <label>
-          口令
-          <input type="password" id="decrypt-pass" autocomplete="off" spellcheck="false" />
-        </label>
-      </div>
-      <button type="button" id="btn-decrypt" class="primary">解密並下載 plaintext JSON</button>
     </section>
 
     <!-- ROTATE -->
-    <section id="panel-rotate" class="panel">
-      <h2>輪替 DEK</h2>
-      <p>以舊 DEK 解密歷史 → 產生新 DEK → 重加密（revision +1）→ <strong>清空所有使用者</strong>。之後須重新「新增使用者」。</p>
+    <section id="panel-rotate" class="panel" role="tabpanel">
       <div class="warn-box">
-        錯誤口令會在寫入前失敗，不會破壞既有檔案。新 .dek 為【僅本機】機密。
+        <strong>輪替會清空所有用戶</strong>
+        用舊 DEK 解密歷史 → 新 DEK → 重加密 → 空 keyring。之後要喺「用戶」重新加入。
       </div>
-      <fieldset>
-        <legend>舊 DEK 來源</legend>
-        <label class="check">
-          <input type="radio" name="rotate-mode" value="memory" checked />
-          使用記憶體中的 DEK
-        </label>
-        <label class="check">
-          <input type="radio" name="rotate-mode" value="user" />
-          以使用者口令 unwrap（無 .dek 時）
-        </label>
-      </fieldset>
-      <div class="grid-2">
-        <label>
-          使用者
-          <select id="rotate-user"></select>
-        </label>
-        <label>
-          口令
-          <input type="password" id="rotate-pass" autocomplete="off" spellcheck="false" />
-        </label>
-        <label>
-          新 .dek 下載格式
-          <select id="rotate-dek-format">
-            <option value="raw">原始二進位</option>
-            <option value="b64">Base64</option>
-            <option value="none">不下載 .dek</option>
-          </select>
-        </label>
-      </div>
-      <button type="button" id="btn-rotate" class="danger">執行輪替並下載產物</button>
-    </section>
 
-    <!-- EXPORT -->
-    <section id="panel-export" class="panel">
-      <h2>重新下載目前記憶體產物</h2>
-      <div class="row">
-        <button type="button" id="btn-dl-keyring">下載 keyring.json</button>
-        <button type="button" id="btn-dl-enc">下載 chat-history.enc</button>
-      </div>
-      <div class="row">
-        <label>
-          .dek 格式
-          <select id="download-dek-format">
-            <option value="raw">原始二進位</option>
-            <option value="b64">Base64</option>
-          </select>
-        </label>
-        <button type="button" id="btn-dl-dek" class="warn">下載 .dek（僅本機）</button>
-      </div>
-      <div class="warn-box">
-        網路磁碟只應放置 <code>keyring.json</code> 與 <code>chat-history.enc</code>。
-        口令僅口頭傳遞；.dek 永不分享。
+      <div class="card">
+        <h2>輪替 DEK</h2>
+        <fieldset>
+          <legend>舊 DEK 來源</legend>
+          <label class="check">
+            <input type="radio" name="rotate-mode" value="user" checked />
+            用口傳 passphrase 解鎖（建議）
+          </label>
+          <label class="check">
+            <input type="radio" name="rotate-mode" value="memory" />
+            用記憶體中已有 DEK
+          </label>
+        </fieldset>
+        <div id="rotate-pass-block" class="grid-2">
+          <label>
+            用戶
+            <select id="rotate-user"></select>
+          </label>
+          <label>
+            口傳 passphrase
+            <input type="password" id="rotate-pass" autocomplete="off" spellcheck="false" />
+          </label>
+        </div>
+        <button type="button" id="btn-rotate" class="danger btn-lg">執行輪替並下載</button>
+        <p class="hint">會下載新 keyring（空用戶）+ enc。口令錯就唔會改任何嘢。</p>
+        <details class="advanced-inline">
+          <summary>進階：一併下載新 .dek</summary>
+          <label>
+            .dek 下載
+            <select id="rotate-dek-format">
+              <option value="none" selected>唔下載（預設）</option>
+              <option value="raw">原始二進位</option>
+              <option value="b64">Base64</option>
+            </select>
+          </label>
+        </details>
       </div>
     </section>
   </main>
 
+  <!-- ADVANCED -->
+  <aside class="advanced-wrap">
+    <details class="advanced">
+      <summary>進階工具（少用）</summary>
+      <div class="advanced-body">
+        <section class="card">
+          <h3>下載／匯入 .dek（僅本機後備）</h3>
+          <p class="hint">日常唔使 .dek；只係操作者本機後備。絕不可放 network drive。</p>
+          <div class="row">
+            <label>
+              匯入 .dek
+              <input type="file" id="import-dek" accept=".dek,.b64,.txt,*/*" />
+            </label>
+            <button type="button" id="btn-import-dek">匯入到記憶體</button>
+          </div>
+          <div class="row">
+            <label>
+              下載格式
+              <select id="download-dek-format">
+                <option value="raw">原始二進位</option>
+                <option value="b64">Base64</option>
+              </select>
+            </label>
+            <button type="button" id="btn-dl-dek" class="warn">下載記憶體 .dek</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>明文 JSON 加密／解密</h3>
+          <p class="hint">管理員救資料用。日常傾偈用 chatroom，唔使喺度做。</p>
+          <div class="row">
+            <label>
+              明文 messages JSON 檔
+              <input type="file" id="encrypt-file" accept=".json,application/json" />
+            </label>
+            <button type="button" id="btn-load-plain">載入到編輯器</button>
+          </div>
+          <label>
+            明文（可編輯）
+            <textarea id="messages-editor" rows="10" spellcheck="false"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" id="btn-encrypt" class="primary">加密並下載 enc</button>
+          </div>
+          <hr class="soft" />
+          <label class="check">
+            <input type="checkbox" id="decrypt-use-memory" />
+            優先用記憶體 DEK（若已載入）
+          </label>
+          <div class="grid-2">
+            <label>
+              用戶
+              <select id="decrypt-user"></select>
+            </label>
+            <label>
+              口傳 passphrase
+              <input type="password" id="decrypt-pass" autocomplete="off" spellcheck="false" />
+            </label>
+          </div>
+          <button type="button" id="btn-decrypt" class="primary">解密並下載明文</button>
+        </section>
+
+        <section class="card">
+          <h3>重新下載目前記憶體檔案</h3>
+          <div class="row">
+            <button type="button" id="btn-dl-keyring">下載 keyring.json</button>
+            <button type="button" id="btn-dl-enc">下載 chat-history.enc</button>
+          </div>
+        </section>
+      </div>
+    </details>
+  </aside>
+
   <footer class="footer">
-    <p>純靜態頁 · Web Crypto · 無 CDN / 無外部腳本 · 私有倉庫 tommyt852/dek-factory</p>
+    <p>純靜態頁 · Web Crypto · 無 CDN · 只放 keyring + enc 到 network drive</p>
   </footer>
 
   <script type="module" src="js/app.js"></script>
